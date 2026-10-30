@@ -987,6 +987,7 @@ static void __cxl_event_trace_record(struct cxl_memdev *cxlmd,
 	else if (uuid_equal(uuid, &CXL_EVENT_MEM_SPARING_UUID))
 		ev_type = CXL_CPER_EVENT_MEM_SPARING;
 
+	cxl_compress_handle_event(cxlmd, uuid, &record->event);
 	cxl_event_trace_record(cxlmd, type, ev_type, uuid, &record->event);
 }
 

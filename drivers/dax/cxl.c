@@ -13,12 +13,24 @@ static int cxl_dax_region_probe(struct device *dev)
 	struct cxl_region *cxlr = cxlr_dax->cxlr;
 	struct dax_region *dax_region;
 	struct dev_dax_data data;
+	unsigned long flags = IORESOURCE_DAX_KMEM;
 
 	if (nid == NUMA_NO_NODE)
 		nid = memory_add_physaddr_to_nid(cxlr_dax->hpa_range.start);
 
+	/*
+	 * Oversubscribed compression segments must stay in device-dax
+	 * mode so cxl_cswap (or userspace) can gate writes. Do not hand
+	 * them to dax_kmem / System-RAM.
+	 */
+	if (cxl_region_compress_skip_kmem(cxlr)) {
+		dev_info(dev,
+			 "compress oversubscribed region: skip dax_kmem\n");
+		flags = 0;
+	}
+
 	dax_region = alloc_dax_region(dev, cxlr->id, &cxlr_dax->hpa_range, nid,
-				      PMD_SIZE, IORESOURCE_DAX_KMEM);
+				      PMD_SIZE, flags);
 	if (!dax_region)
 		return -ENOMEM;
 

@@ -644,3 +644,34 @@ Description:
 		The count is persistent across power loss and wraps back to 0
 		upon overflow. If this file is not present, the device does not
 		have the necessary support for dirty tracking.
+
+
+What:		/sys/bus/cxl/devices/memX/compression/phys_total
+		/sys/bus/cxl/devices/memX/compression/phys_used
+		/sys/bus/cxl/devices/memX/compression/guaranteed_size
+		/sys/bus/cxl/devices/memX/compression/logical_size
+		/sys/bus/cxl/devices/memX/compression/allocated_pages
+		/sys/bus/cxl/devices/memX/compression/poison_pages
+		/sys/bus/cxl/devices/memX/compression/free_slots
+Date:		October, 2026
+KernelVersion:	v7.3 (out-of-tree CompressCXL Hybrid)
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(RO) Transparent-compression capacity telemetry from vendor
+		mailbox opcodes C000h (Get Cap) and C002h (Get Page Acct).
+		Present only when the device accepts C000h. Values are bytes
+		for capacity fields and page counts for accounting fields.
+		Reading refreshes the cached values from the device.
+
+
+What:		/sys/bus/cxl/devices/memX/compression/low_wm
+		/sys/bus/cxl/devices/memX/compression/high_wm
+Date:		October, 2026
+KernelVersion:	v7.3 (out-of-tree CompressCXL Hybrid)
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(RW) Capacity watermark thresholds in bytes. Writing updates
+		the device via vendor mailbox C001h (Set Watermarks) and
+		refreshes the cached Get Cap values. Crossing these thresholds
+		produces a vendor event with UUID
+		6f3c9a21-8b44-4e1d-9c55-a1b2c3d4e5f6.

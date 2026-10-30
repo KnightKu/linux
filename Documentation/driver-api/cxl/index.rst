@@ -15,6 +15,7 @@ that have impacts on each other.  The docs here break up configurations steps.
    theory-of-operation
    maturity-map
    conventions
+   compress
 
 .. toctree::
    :maxdepth: 2
