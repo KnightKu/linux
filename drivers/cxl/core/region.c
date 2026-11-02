@@ -900,6 +900,12 @@ static int match_free_decoder(struct device *dev, const void *data)
 		return 0;
 
 	if (cxld->region) {
+		/*
+		 * Passthrough decoders do not program HDM; allow multiple
+		 * regions to share the single software stub on a 1-dport HB.
+		 */
+		if (cxld->flags & CXL_DECODER_F_PASSTHROUGH)
+			return 1;
 		dev_dbg(dev->parent,
 			"next decoder to commit (%s) is already reserved (%s)\n",
 			dev_name(dev), dev_name(&cxld->region->dev));
@@ -1063,15 +1069,37 @@ static void cxl_rr_free_decoder(struct cxl_region_ref *cxl_rr)
 {
 	struct cxl_region *cxlr = cxl_rr->region;
 	struct cxl_decoder *cxld = cxl_rr->decoder;
+	struct cxl_port *port = cxl_rr->port;
+	struct cxl_region_ref *iter;
+	unsigned long index;
 
 	if (!cxld)
 		return;
 
-	dev_WARN_ONCE(&cxlr->dev, cxld->region != cxlr, "region mismatch\n");
-	if (cxld->region == cxlr) {
-		cxld->region = NULL;
-		put_device(&cxlr->dev);
+	if (cxld->region != cxlr) {
+		/*
+		 * Shared passthrough: another region holds cxld->region.
+		 * Nothing to clear for this reference.
+		 */
+		if (cxld->flags & CXL_DECODER_F_PASSTHROUGH)
+			return;
+		dev_WARN_ONCE(&cxlr->dev, 1, "region mismatch\n");
+		return;
 	}
+
+	if (cxld->flags & CXL_DECODER_F_PASSTHROUGH) {
+		xa_for_each(&port->regions, index, iter) {
+			if (iter == cxl_rr || iter->decoder != cxld)
+				continue;
+			put_device(&cxlr->dev);
+			get_device(&iter->region->dev);
+			cxld->region = iter->region;
+			return;
+		}
+	}
+
+	cxld->region = NULL;
+	put_device(&cxlr->dev);
 }
 
 static void free_region_ref(struct cxl_region_ref *cxl_rr)
@@ -1123,7 +1151,7 @@ static int cxl_rr_assign_decoder(struct cxl_port *port, struct cxl_region *cxlr,
 				 struct cxl_region_ref *cxl_rr,
 				 struct cxl_decoder *cxld)
 {
-	if (cxld->region) {
+	if (cxld->region && !(cxld->flags & CXL_DECODER_F_PASSTHROUGH)) {
 		dev_dbg(&cxlr->dev, "%s: %s already attached to %s\n",
 			dev_name(&port->dev), dev_name(&cxld->dev),
 			dev_name(&cxld->region->dev));
