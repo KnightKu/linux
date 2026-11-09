@@ -617,6 +617,7 @@ struct cxl_mbox_identify {
 
 #define CXL_COMPRESS_WM_LEVEL_LOW	0
 #define CXL_COMPRESS_WM_LEVEL_HIGH	1
+#define CXL_COMPRESS_WM_LEVEL_CRITICAL	2
 
 /*
  * Get Event Records output payload
@@ -888,6 +889,21 @@ void cxl_compress_handle_event(struct cxl_memdev *cxlmd, const uuid_t *uuid,
 int cxl_compress_refresh(struct cxl_memdev_state *mds);
 int cxl_compress_media_zero(struct cxl_memdev_state *mds, u64 dpa, u64 length);
 extern struct attribute_group cxl_memdev_compress_attribute_group;
+
+struct cxl_compress_alert {
+	struct cxl_memdev *cxlmd;
+	u8 level;
+	u64 phys_used;
+	u64 phys_total;
+};
+
+int cxl_compress_register_alert(struct notifier_block *nb);
+int cxl_compress_unregister_alert(struct notifier_block *nb);
+int cxl_compress_register_hpa_range(struct cxl_memdev *cxlmd, u64 hpa,
+				    u64 length, int nid);
+int cxl_compress_sync_free_pages(struct cxl_memdev *cxlmd);
+void cxl_compress_emergency_init(void);
+void cxl_compress_emergency_exit(void);
 
 /**
  * struct cxl_hdm - HDM Decoder registers and cached / decoded capabilities
