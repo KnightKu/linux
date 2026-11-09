@@ -65,6 +65,7 @@ static int devm_cxl_add_passthrough_decoder(struct cxl_port *port)
 	if (IS_ERR(cxlsd))
 		return PTR_ERR(cxlsd);
 
+	cxlsd->cxld.flags |= CXL_DECODER_F_PASSTHROUGH;
 	device_lock_assert(&port->dev);
 
 	return add_hdm_decoder(port, &cxlsd->cxld);

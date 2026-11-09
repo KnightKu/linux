@@ -243,4 +243,19 @@ config CXL_ATL
 	depends on CXL_REGION
 	depends on ACPI_PRMT && AMD_NB
 
+config CXL_COMPRESS_SWAP
+	tristate "CXL: Transparent-compression Hybrid swap"
+	depends on CXL_MEM && CXL_REGION && BLK_DEV
+	help
+	  Bind the oversubscribed DPA segment of a transparent-compression
+	  Type-3 device as a synchronous block device for use as swap.
+	  Writes are rejected with BLK_STS_NOSPC when physical capacity is
+	  exhausted (worst-case 4KiB accounting via vendor mailbox C000h).
+	  Discard issues Media Operations Zero (4402h).
+
+	  The guaranteed 1:1 segment continues to be onlined via dax_kmem.
+	  This option does not implement Private Memory Nodes.
+
+	  If unsure say N.
+
 endif

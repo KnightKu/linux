@@ -183,7 +183,7 @@ static inline struct cxl_ep *cxl_ep_load(struct cxl_port *port,
 	C(MBUNSUPPORTED, -ENXIO, "unsupported on the mailbox it was issued on"),\
 	C(PAYLOADLEN, -ENXIO, "invalid payload length"),			\
 	C(LOG, -ENXIO, "invalid or unsupported log page"),			\
-	C(INTERRUPTED, -ENXIO, "asynchronous event occured"),			\
+	C(INTERRUPTED, -ENXIO, "asynchronous event occurred"),			\
 	C(FEATUREVERSION, -ENXIO, "unsupported feature version"),		\
 	C(FEATURESELVALUE, -ENXIO, "unsupported feature selection value"),	\
 	C(FEATURETRANSFERIP, -ENXIO, "feature transfer in progress"),		\
@@ -431,11 +431,25 @@ static inline struct cxl_dev_state *mbox_to_cxlds(struct cxl_mailbox *cxl_mbox)
  * @poison: poison driver state info
  * @security: security driver state info
  * @fw: firmware upload / activation state
- * @mce_notifier: MCE notifier
+ * @compress: transparent-compression capacity telemetry (vendor mailbox)
  *
  * See CXL 3.0 8.2.9.8.2 Capacity Configuration and Label Storage for
  * details on capacity parameters.
  */
+struct cxl_compress_state {
+	bool enabled;
+	struct mutex lock; /* protects cached telemetry fields */
+	u64 phys_total;
+	u64 phys_used;
+	u64 guaranteed_size;
+	u64 logical_size;
+	u64 low_wm;
+	u64 high_wm;
+	u64 allocated_pages;
+	u64 poison_pages;
+	u64 free_slots;
+};
+
 struct cxl_memdev_state {
 	struct cxl_dev_state cxlds;
 	size_t lsa_size;
@@ -451,7 +465,7 @@ struct cxl_memdev_state {
 	struct cxl_poison_state poison;
 	struct cxl_security_state security;
 	struct cxl_fw_state fw;
-	struct notifier_block mce_notifier;
+	struct cxl_compress_state compress;
 };
 
 static inline struct cxl_memdev_state *
@@ -501,7 +515,12 @@ enum cxl_opcode {
 	CXL_MBOX_OP_GET_SCAN_MEDIA	= 0x4305,
 	CXL_MBOX_OP_SANITIZE		= 0x4400,
 	CXL_MBOX_OP_SECURE_ERASE	= 0x4401,
+	CXL_MBOX_OP_MEDIA_OPERATIONS	= 0x4402,
 	CXL_MBOX_OP_GET_SECURITY_STATE	= 0x4500,
+	/* Vendor set 0xC0: transparent-compression capacity (QEMU P0 ABI) */
+	CXL_MBOX_OP_COMPRESS_GET_CAP	= 0xC000,
+	CXL_MBOX_OP_COMPRESS_SET_WM	= 0xC001,
+	CXL_MBOX_OP_COMPRESS_GET_ACCT	= 0xC002,
 	CXL_MBOX_OP_SET_PASSPHRASE	= 0x4501,
 	CXL_MBOX_OP_DISABLE_PASSPHRASE	= 0x4502,
 	CXL_MBOX_OP_UNLOCK		= 0x4503,
@@ -587,6 +606,18 @@ struct cxl_mbox_identify {
 #define CXL_EVENT_MEM_SPARING_UUID                                          \
 	UUID_INIT(0xe71f3a40, 0x2d29, 0x4092, 0x8a, 0x39, 0x4d, 0x1c, 0x96, \
 		  0x6c, 0x7c, 0x65)
+
+/*
+ * Vendor capacity-watermark event UUID (private, QEMU CompressCXL P0):
+ * 6f3c9a21-8b44-4e1d-9c55-a1b2c3d4e5f6
+ */
+#define CXL_EVENT_COMPRESS_WM_UUID                                          \
+	UUID_INIT(0x6f3c9a21, 0x8b44, 0x4e1d, 0x9c, 0x55, 0xa1, 0xb2, 0xc3, \
+		  0xd4, 0xe5, 0xf6)
+
+#define CXL_COMPRESS_WM_LEVEL_LOW	0
+#define CXL_COMPRESS_WM_LEVEL_HIGH	1
+#define CXL_COMPRESS_WM_LEVEL_CRITICAL	2
 
 /*
  * Get Event Records output payload
@@ -851,6 +882,28 @@ static inline void cxl_mem_active_dec(void)
 #endif
 
 int cxl_mem_sanitize(struct cxl_memdev *cxlmd, u16 cmd);
+
+int cxl_compress_probe(struct cxl_memdev_state *mds);
+void cxl_compress_handle_event(struct cxl_memdev *cxlmd, const uuid_t *uuid,
+			       union cxl_event *evt);
+int cxl_compress_refresh(struct cxl_memdev_state *mds);
+int cxl_compress_media_zero(struct cxl_memdev_state *mds, u64 dpa, u64 length);
+extern struct attribute_group cxl_memdev_compress_attribute_group;
+
+struct cxl_compress_alert {
+	struct cxl_memdev *cxlmd;
+	u8 level;
+	u64 phys_used;
+	u64 phys_total;
+};
+
+int cxl_compress_register_alert(struct notifier_block *nb);
+int cxl_compress_unregister_alert(struct notifier_block *nb);
+int cxl_compress_register_hpa_range(struct cxl_memdev *cxlmd, u64 hpa,
+				    u64 length, int nid);
+int cxl_compress_sync_free_pages(struct cxl_memdev *cxlmd);
+void cxl_compress_emergency_init(void);
+void cxl_compress_emergency_exit(void);
 
 /**
  * struct cxl_hdm - HDM Decoder registers and cached / decoded capabilities
