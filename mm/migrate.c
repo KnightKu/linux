@@ -2233,6 +2233,39 @@ struct folio *alloc_migration_target(struct folio *src, unsigned long private)
 	return __folio_alloc(gfp_mask, order, nid, mtc->nmask);
 }
 
+#include <linux/cxl_compress_emergency.h>
+
+/**
+ * cxl_compress_migrate_folio_to_nid - move a folio off a compress node
+ * @folio: folio that must already hold an elevated refcount
+ * @dest_nid: destination NUMA node
+ *
+ * Used by the CXL compress emergency HARD path on write-fault after
+ * pages were write-protected. Returns 0 on success.
+ */
+int cxl_compress_migrate_folio_to_nid(struct folio *folio, int dest_nid)
+{
+	LIST_HEAD(src);
+	struct migration_target_control mtc = {
+		.nid = dest_nid,
+		.gfp_mask = GFP_HIGHUSER_MOVABLE,
+		.reason = MR_NUMA_MISPLACED,
+	};
+	int rc;
+
+	if (dest_nid < 0 || dest_nid >= MAX_NUMNODES || !node_online(dest_nid))
+		return -EINVAL;
+	if (!isolate_folio_to_list(folio, &src))
+		return -EBUSY;
+	rc = migrate_pages(&src, alloc_migration_target, NULL,
+			   (unsigned long)&mtc, MIGRATE_SYNC,
+			   MR_NUMA_MISPLACED, NULL);
+	if (rc)
+		putback_movable_pages(&src);
+	return rc ? -ENOMEM : 0;
+}
+EXPORT_SYMBOL_GPL(cxl_compress_migrate_folio_to_nid);
+
 #ifdef CONFIG_NUMA_MIGRATION
 static int store_status(int __user *status, int start, int value, int nr)
 {

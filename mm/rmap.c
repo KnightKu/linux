@@ -75,6 +75,7 @@
 #include <linux/userfaultfd_k.h>
 #include <linux/mm_inline.h>
 #include <linux/oom.h>
+#include <linux/cxl_compress_emergency.h>
 
 #include <asm/tlb.h>
 
@@ -1228,6 +1229,29 @@ int folio_mkclean(struct folio *folio)
 	return cleaned;
 }
 EXPORT_SYMBOL_GPL(folio_mkclean);
+
+/*
+ * Write-protect every PTE/PMD mapping of @folio (anon or file). Used by the
+ * CXL compress emergency HARD path so subsequent writes fault and migrate
+ * off the oversubscribed node. Caller need not hold the folio lock.
+ */
+int cxl_compress_wrprotect_folio(struct folio *folio)
+{
+	int cleaned = 0;
+	struct rmap_walk_control rwc = {
+		.arg = (void *)&cleaned,
+		.rmap_one = page_mkclean_one,
+	};
+
+	if (!folio_mapped(folio))
+		return 0;
+	if (!folio_trylock(folio))
+		return 0;
+	rmap_walk(folio, &rwc);
+	folio_unlock(folio);
+	return cleaned;
+}
+EXPORT_SYMBOL_GPL(cxl_compress_wrprotect_folio);
 
 struct wrprotect_file_state {
 	int cleaned;

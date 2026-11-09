@@ -7614,6 +7614,7 @@ void wakeup_kswapd(struct zone *zone, gfp_t gfp_flags, int order,
 				      gfp_flags);
 	wake_up_interruptible(&pgdat->kswapd_wait);
 }
+EXPORT_SYMBOL_GPL(wakeup_kswapd);
 
 void kswapd_clear_hopeless(pg_data_t *pgdat, enum kswapd_clear_hopeless_reason reason)
 {

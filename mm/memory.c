@@ -72,7 +72,11 @@
 #include <linux/dax.h>
 #include <linux/oom.h>
 #include <linux/numa.h>
+#include <linux/cxl_compress_emergency.h>
 #include <linux/perf_event.h>
+
+cxl_ce_wp_fault_fn cxl_compress_emergency_wp_fault_hook;
+EXPORT_SYMBOL_GPL(cxl_compress_emergency_wp_fault_hook);
 #include <linux/ptrace.h>
 #include <linux/vmalloc.h>
 #include <linux/sched/sysctl.h>
@@ -4420,6 +4424,23 @@ static vm_fault_t do_wp_page(struct vm_fault *vmf)
 
 	if (vmf->page)
 		folio = page_folio(vmf->page);
+
+	/*
+	 * CXL compress emergency (HARD): pages still on the oversubscribed
+	 * node must migrate off before becoming writable again.
+	 */
+	if (folio && cxl_compress_emergency_wp_fault_hook) {
+		int ce = cxl_compress_emergency_wp_fault_hook(folio);
+
+		if (ce > 0) {
+			pte_unmap_unlock(vmf->pte, vmf->ptl);
+			return VM_FAULT_RETRY;
+		}
+		if (ce < 0) {
+			pte_unmap_unlock(vmf->pte, vmf->ptl);
+			return VM_FAULT_SIGBUS;
+		}
+	}
 
 	/*
 	 * Shared mapping: we are guaranteed to have VM_WRITE and
