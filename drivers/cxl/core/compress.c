@@ -523,11 +523,20 @@ static ssize_t track_range_store(struct device *dev,
 	struct cxl_memdev *cxlmd = to_cxl_memdev(dev);
 	u64 hpa, length;
 	int nid, rc;
+	char *endp;
 
-	/* "hpa length nid" */
-	rc = sscanf(buf, "%llu %llu %d", &hpa, &length, &nid);
-	if (rc != 3)
+	/* "hpa length nid" — base-0 so region resource hex (0x…) is accepted */
+	hpa = simple_strtoull(buf, &endp, 0);
+	if (endp == buf)
 		return -EINVAL;
+	while (*endp == ' ' || *endp == '\t')
+		endp++;
+	length = simple_strtoull(endp, &endp, 0);
+	if (*endp == '\0')
+		return -EINVAL;
+	while (*endp == ' ' || *endp == '\t')
+		endp++;
+	nid = simple_strtol(endp, &endp, 0);
 	rc = cxl_compress_register_hpa_range(cxlmd, hpa, length, nid);
 	return rc ? rc : len;
 }
